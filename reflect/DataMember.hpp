@@ -2,8 +2,9 @@
 #define DATA_MEMBER_H
 
 #include "TypeDescriptor.hpp"
-#include "Any.hpp"
+
 #include <string>
+#include <any>
 
 namespace Reflect
 {
@@ -15,8 +16,8 @@ namespace Reflect
 		const TypeDescriptor *GetParent() const { return mParent; }
 		const TypeDescriptor *GetType() const { return mType; }
 
-		virtual void Set(AnyRef objectRef, const Any value) = 0;
-		virtual Any Get(Any object) = 0;
+		virtual void Set(std::any& objectRef, const std::any& value) = 0;
+		virtual std::any Get(std::any const& object) = 0;
 
 	protected:
 		DataMember(const std::string &name, const TypeDescriptor *type, const TypeDescriptor *parent)
@@ -35,73 +36,34 @@ namespace Reflect
 		PtrDataMember(Type Class::*dataMemberPtr, const std::string name)
 			: DataMember(name, Details::Resolve<Type>(), Details::Resolve<Class>()), mDataMemberPtr(dataMemberPtr) {}
 
-		// void Set(AnyRef objectRef, const Any value) override
+		// void Set(std::anyRef objectRef, const std::any value) override
 		// {
 		// 	SetImpl(objectRef, value);  // use SFINAE
 		// }
 
-		void Set(AnyRef objectRef, const Any value) override
+		void Set(std::any& objectRef, const std::any& value) override
 		{
 			SetImpl(objectRef, value, std::is_const<Type>());  // use tag dispatch
 		}
 
-		Any Get(Any object) override
+		std::any Get(std::any const& object) override
 		{
-			Class *obj = object.TryCast<Class>();
-
-			if (!obj)
-				throw BadCastException(Details::Resolve<Class>()->GetName(), object.GetType()->GetName());
-
-			return obj->*mDataMemberPtr;
+			return std::any_cast<Class>(&object)->*mDataMemberPtr;
 		}
 
 	private:
 		Type Class::*mDataMemberPtr;
 
-		////// use SFINAE
-		// template <typename U = Type, typename = typename std::enable_if<!std::is_const<U>::value>::type>
-		// void SetImpl(Any object, const Any value)
-		// {
-		// 	Class *obj = object.TryCast<Class>();
-		// 	if (!obj)
-		// 		throw BadCastException(Details::Resolve<Type>()->GetName(), object.GetType()->GetName(), "object:");
-	
-		// 	Any val = value.TryConvert<Type>();
-	
-		// 	if (!val)
-		// 		throw BadCastException(Details::Resolve<Type>()->GetName(), value.GetType()->GetName(), "value:");
-		// 	obj->*mDataMemberPtr = val.TryCast<Type>();
-		// }
-
-		// template <typename U = Type, typename = typename std::enable_if<std::is_const<U>::value>::type, typename = void>
-		// void SetImpl(Any object, const Any value)
-		// {
-		// 	static_assert(false, "can't set const data member");
-		// }
-
 		////// use tag dispatch
-		void SetImpl(Any object, const Any value, std::false_type)
+		void SetImpl(std::any& object, const std::any& value, std::false_type)
 		{
-			Class *obj = object.TryCast<Class>();  // pointers to members of base class can be used with derived class
+			Class *obj = std::any_cast<Class>(&object);  // pointers to members of base class can be used with derived class
+			Type const *val = std::any_cast<Type>(&value);
 
-			if (!obj)
-				throw BadCastException(Details::Resolve<Class>()->GetName(), object.GetType()->GetName(), "object:");
-
-			Type const *casted = nullptr;
-			Any val;
-			if (casted = value.TryCast<Type>(); !casted)
-			{
-				val = value.TryConvert<Type>();
-				casted = val.TryCast<Type>();
-			}
-
-			if (!casted)
-				throw BadCastException(Details::Resolve<Type>()->GetName(), value.GetType()->GetName(), "value:");
-
-			obj->*mDataMemberPtr = *casted;
+			obj->*mDataMemberPtr = *val;
 		}
 
-		void SetImpl(Any object, const Any value, std::true_type)
+		void SetImpl(std::any& object, const std::any& value, std::true_type)
 		{
 			//static_assert(false, "can't set const data member");
 		}
@@ -137,42 +99,25 @@ namespace Reflect
 		SetGetDataMember(const std::string name)
 			: DataMember(name, Details::Resolve<MemberType>(), Details::Resolve<Class>()) {}
 
-		void Set(AnyRef objectRef, const Any value) override
+		void Set(std::any& objectRef, const std::any& value) override
 		{
-			Any a = objectRef;
-			Class *obj = a.TryCast<Class>();
-
-			if (!obj)
-				throw BadCastException(Details::Resolve<Class>()->GetName(), Any(objectRef).GetType()->GetName(), "object:");
-
-			MemberType const *casted = nullptr;
-			Any val;
-			if (casted = value.TryCast<MemberType>(); !casted)
-			{
-				val = value.TryConvert<MemberType>();
-				casted = val.TryCast<MemberType>();
-			}
-
-			if (!casted)
-				throw BadCastException(Details::Resolve<MemberType>()->GetName(), value.GetType()->GetName(), "value:");
+			Class *obj = std::any_cast<Class>(&objectRef);
+			MemberType *val = std::any_cast<MemberType>(&value);
 
 			if constexpr (std::is_member_function_pointer_v<decltype(Setter)>)
-				(obj->*Setter)(*casted);
+				(obj->*Setter)(*val);
 			else
 			{
 				static_assert(std::is_function_v<std::remove_pointer_t<decltype(Setter)>>);
 
-				Setter(*obj, *casted);
+				Setter(*obj, *val);
 			}
 
 		}
 
-		Any Get(Any object) override
+		std::any Get(std::any const& object) override
 		{
-			Class *obj = object.TryCast<Class>();
-
-			if (!obj)
-				throw BadCastException(Details::Resolve<Class>()->GetName(), object.GetType()->GetName());
+			Class *obj = std::any_cast<Class>(&object);
 
 			if constexpr (std::is_member_function_pointer_v<decltype(Setter)>)
 				return (obj->*Getter)();

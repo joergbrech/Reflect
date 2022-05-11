@@ -1,8 +1,9 @@
 #ifndef CONVERSION_H
 #define CONVERSION_H
 
+#include <any>
+
 #include "TypeDescriptor.hpp"
-#include "Any.hpp"
 
 namespace Reflect
 {
@@ -13,7 +14,7 @@ namespace Reflect
 		const TypeDescriptor *GetFromType() const { return mFromType; }
 		const TypeDescriptor *GetToType() const { return mToType; }
 
-		virtual Any Convert(const void *object) const = 0;
+		virtual std::any Convert(const void *object) const = 0;
 
 	protected:
 		Conversion(const TypeDescriptor *from, const TypeDescriptor *to)
@@ -30,7 +31,7 @@ namespace Reflect
 	public:
 		ConversionImpl() : Conversion(Details::Resolve<From>(), Details::Resolve<To>()) {}
 
-		Any Convert(const void *object) const override
+		std::any Convert(const void *object) const override
 		{
 			//return To(*static_cast<const From*>(object));
 			return static_cast<To>(*static_cast<const From*>(object));

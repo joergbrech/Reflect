@@ -4,8 +4,9 @@
 #include <string>
 #include <vector>
 #include <tuple>
+#include <any>
+
 #include "TypeDescriptor.hpp"
-#include "Any.hpp"
 
 namespace Reflect
 {
@@ -17,16 +18,16 @@ namespace Reflect
 		const TypeDescriptor *GetParent() const { return mParent; }
 
 		template <typename... Args>
-		Any Invoke(AnyRef object, Args&&... args) const
+		std::any Invoke(std::any& object, Args&&... args) const
 		{
 			if (sizeof...(Args) == mParamTypes.size())
 			{
-				std::vector<Any> anyArgs{ Any(std::forward<Args>(args))... };
+				std::vector<std::any> anyArgs{ std::any(std::forward<Args>(args))... };
 
 				return InvokeImpl(object, anyArgs);
 			}
 
-			return Any();
+			return std::any();
 		}
 
 		const TypeDescriptor *GetReturnType() const
@@ -57,7 +58,7 @@ namespace Reflect
 		std::vector<TypeDescriptor const *> mParamTypes;
 
 	private:
-		virtual Any InvokeImpl(Any object, std::vector<Any> &args) const = 0;
+		virtual std::any InvokeImpl(std::any object, std::vector<std::any> &args) const = 0;
 
 		std::string mName;
 		TypeDescriptor const *const mParent;
@@ -75,25 +76,25 @@ namespace Reflect
 			: Function(name, nullptr, Details::Resolve<Ret>(), { Details::Resolve<std::remove_cv_t<std::remove_reference_t<Args>>>()... }), mFreeFunPtr(freeFunPtr) {}
 
 	private:
-		Any InvokeImpl(Any, std::vector<Any> &args) const override
+		std::any InvokeImpl(std::any, std::vector<std::any> &args) const override
 		{
 			return InvokeImpl(args, std::index_sequence_for<Args...>());
 		}
 
 		template <size_t... indices>
-		Any InvokeImpl(std::vector<Any> &args, std::index_sequence<indices...> indexSequence) const
+		std::any InvokeImpl(std::vector<std::any> &args, std::index_sequence<indices...> indexSequence) const
 		{
-			std::tuple argsTuple = std::make_tuple(args[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
-			std::vector<Any> convertedArgs{ (std::get<indices>(argsTuple) ? AnyRef(*std::get<indices>(argsTuple)) : args[indices].TryConvert<std::remove_cv_t<std::remove_reference_t<Args>>>())... };
-			argsTuple = std::make_tuple(convertedArgs[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
+			std::tuple argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&args[indices])...);
+			std::vector<std::any> convertedArgs{ std::get<indices>(argsTuple)... };
+			argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&convertedArgs[indices])...);
 
 			if ((std::get<indices>(argsTuple) && ...))  // all arguments are valid
 				if constexpr (std::is_reference_v<Ret>)
-					return AnyRef(mFreeFunPtr(*std::get<indices>(argsTuple)...));
+					return std::any(mFreeFunPtr(*std::get<indices>(argsTuple)...));
 				else
 					return mFreeFunPtr(*std::get<indices>(argsTuple)...);
 			else
-				return Any();
+				return std::any();
 		}
 
 		FunPtr mFreeFunPtr;
@@ -112,22 +113,22 @@ namespace Reflect
 			mFreeFunPtr(freeFunPtr) {}
 
 	private:
-		Any InvokeImpl(Any, std::vector<Any> &args) const override
+		std::any InvokeImpl(std::any, std::vector<std::any> &args) const override
 		{
 			return InvokeImpl(args, std::index_sequence_for<Args...>());
 		}
 
 		template <size_t... indices>
-		Any InvokeImpl(std::vector<Any> &args, std::index_sequence<indices...> indexSequence) const
+		std::any InvokeImpl(std::vector<std::any> &args, std::index_sequence<indices...> indexSequence) const
 		{
-			std::tuple argsTuple = std::make_tuple(args[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
-			std::vector<Any> convertedArgs{ (std::get<indices>(argsTuple) ? AnyRef(*std::get<indices>(argsTuple)) : args[indices].TryConvert<std::remove_cv_t<std::remove_reference_t<Args>>>())... };
-			argsTuple = std::make_tuple(convertedArgs[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
+			std::tuple argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&args[indices])...);
+			std::vector<std::any> convertedArgs{ std::get<indices>(argsTuple)... };
+			argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&convertedArgs[indices])...);
 
 			if ((std::get<indices>(argsTuple) && ...))  // all arguments are valid
 				mFreeFunPtr(*std::get<indices>(argsTuple)...);
 
-			return Any();
+			return std::any();
 		}
 
 		FunPtr mFreeFunPtr;
@@ -145,25 +146,22 @@ namespace Reflect
 			: Function(name, Details::Resolve<C>(), Details::Resolve<Ret>(), { Details::Resolve<std::remove_cv_t<std::remove_reference_t<Args>>>()... }), mMemFunPtr(memFun) {}
 
 	private:
-		Any InvokeImpl(Any object, std::vector<Any> &args) const override
+		std::any InvokeImpl(std::any object, std::vector<std::any> &args) const override
 		{
 			return InvokeImpl(object, args, std::make_index_sequence<sizeof...(Args)>());
 		}
 
 		template <size_t... indices>
-		Any InvokeImpl(Any object, std::vector<Any> &args, std::index_sequence<indices...> indexSequence) const
+		std::any InvokeImpl(std::any& object, std::vector<std::any> &args, std::index_sequence<indices...> indexSequence) const
 		{
-			std::tuple argsTuple = std::make_tuple(args[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
-			std::vector<Any> convertedArgs{ (std::get<indices>(argsTuple) ? AnyRef(*std::get<indices>(argsTuple)) : args[indices].TryConvert<std::remove_cv_t<std::remove_reference_t<Args>>>())... };
-			argsTuple = std::make_tuple(convertedArgs[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
+			std::tuple argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&args[indices])...);
+			std::vector<std::any> convertedArgs{ std::get<indices>(argsTuple)... };
+			argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&convertedArgs[indices])...);
 
-			if (C *obj = object.TryCast<C>(); (std::get<indices>(argsTuple) && ...) && obj)  // object is valid and all arguments are valid 
-				if constexpr (std::is_reference_v<Ret>)
-					return AnyRef((obj->*mMemFunPtr)(*std::get<indices>(argsTuple)...));
-				else
-					return (obj->*mMemFunPtr)(*std::get<indices>(argsTuple)...);
+			if (C *obj = std::any_cast<C>(&object); (std::get<indices>(argsTuple) && ...) && obj)  // object is valid and all arguments are valid 
+				return (obj->*mMemFunPtr)(*std::get<indices>(argsTuple)...);
 			else
-				return Any();
+				return std::any();
 		}
 
 		MemFunPtr mMemFunPtr;
@@ -182,22 +180,22 @@ namespace Reflect
 			mMemFunPtr(memFun) {}
 
 	private:
-		Any InvokeImpl(Any object, std::vector<Any> &args) const override
+		std::any InvokeImpl(std::any& object, std::vector<std::any> &args) const override
 		{
 			return InvokeImpl(object, args, std::make_index_sequence<sizeof...(Args)>());
 		}
 
 		template <size_t... indices>
-		Any InvokeImpl(Any object, std::vector<Any> &args, std::index_sequence<indices...> indexSequence) const
+		std::any InvokeImpl(std::any& object, std::vector<std::any> &args, std::index_sequence<indices...> indexSequence) const
 		{
-			std::tuple argsTuple = std::make_tuple(args[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
-			std::vector<Any> convertedArgs{ (std::get<indices>(argsTuple) ? AnyRef(*std::get<indices>(argsTuple)) : args[indices].TryConvert<std::remove_cv_t<std::remove_reference_t<Args>>>())... };
-			argsTuple = std::make_tuple(convertedArgs[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
+			std::tuple argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&args[indices])...);
+			std::vector<std::any> convertedArgs{ std::get<indices>(argsTuple)... };
+			argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&convertedArgs[indices])...);
 
-			if (C *obj = object.TryCast<C>(); (std::get<indices>(argsTuple) && ...) && obj)  // object is valid and all arguments are valid 
+			if (C *obj = std::any_cast<C>(&object); (std::get<indices>(argsTuple) && ...) && obj)  // object is valid and all arguments are valid 
 				(obj->*mMemFunPtr)(*std::get<indices>(argsTuple)...);
 
-			return Any();
+			return std::any();
 		}
 
 		MemFunPtr mMemFunPtr;
@@ -215,32 +213,29 @@ namespace Reflect
 			: Function(name, Details::Resolve<C>(), Details::Resolve<Ret>(), { Details::Resolve<std::remove_cv_t<std::remove_reference_t<Args>>>()... }), mConstMemFunPtr(constMemFun) {}
 
 	private:
-		Any InvokeImpl(Any object, std::vector<Any> &args) const override
+		std::any InvokeImpl(std::any object, std::vector<std::any> &args) const override
 		{
 			return InvokeImpl(object, args, std::make_index_sequence<sizeof...(Args)>());
 		}
 
 		template <size_t... indices>
-		Any InvokeImpl(Any object, std::vector<Any> &args, std::index_sequence<indices...> indexSequence) const
+		std::any InvokeImpl(std::any& object, std::vector<std::any> &args, std::index_sequence<indices...> indexSequence) const
 		{
-			std::tuple argsTuple = std::make_tuple(args[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
-			std::vector<Any> convertedArgs{ (std::get<indices>(argsTuple) ? AnyRef(*std::get<indices>(argsTuple)) : args[indices].TryConvert<std::remove_cv_t<std::remove_reference_t<Args>>>())... };
-			argsTuple = std::make_tuple(convertedArgs[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
+			std::tuple argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&args[indices])...);
+			std::vector<std::any> convertedArgs{ std::get<indices>(argsTuple)... };
+			argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&convertedArgs[indices])...);
 
-			if (C *obj = object.TryCast<C>(); obj && (std::get<indices>(argsTuple) && ...))  // object is valid and all arguments are valid 
+			if (C *obj = std::any_cast<C>(&object); obj && (std::get<indices>(argsTuple) && ...))  // object is valid and all arguments are valid 
 				if constexpr (std::is_void<Ret>::value)
 				{
 					(obj->*mConstMemFunPtr)(*std::get<indices>(argsTuple)...);
 
-					return Any();
+					return std::any();
 				}
 				else
-					if constexpr (std::is_reference_v<Ret>)
-						return AnyRef((obj->*mConstMemFunPtr)(*std::get<indices>(argsTuple)...));
-					else
-						return (obj->*mConstMemFunPtr)(*std::get<indices>(argsTuple)...);
+					return (obj->*mConstMemFunPtr)(*std::get<indices>(argsTuple)...);
 			else
-				return Any();
+				return std::any();
 		}
 
 		ConstMemFunPtr mConstMemFunPtr;

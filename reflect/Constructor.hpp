@@ -3,8 +3,9 @@
 
 #include <vector>
 #include <tuple>
+#include <any>
+
 #include "TypeDescriptor.hpp"
-#include "Any.hpp"
 #include "Conversion.hpp"
 #include "Base.hpp"
 
@@ -30,24 +31,24 @@ namespace Reflect
 	class Constructor
 	{
 	public:
-		Any NewInstance(std::vector<Any> &args)
+		std::any NewInstance(std::vector<std::any> &args)
 		{
 			if (args.size() == mParamTypes.size())
 				return NewInstanceImpl(args);
 
-			return Any();
+			return std::any();
 		}
 
 		template <typename... Args>
-		Any NewInstance(Args&&... args) const
+		std::any NewInstance(Args&&... args) const
 		{
 			if (sizeof...(Args) == mParamTypes.size())
 			{
-				auto argsAny = std::vector<Any>({ Any(std::forward<Args>(args))... });
+				auto argsAny = std::vector<std::any>({ std::any(std::forward<Args>(args))... });
 				return NewInstanceImpl(argsAny);
 			}
 
-			return Any();
+			return std::any();
 		}
 
 		TypeDescriptor const *GetParent() const
@@ -75,7 +76,7 @@ namespace Reflect
 		Constructor(TypeDescriptor *parent, const std::vector<const TypeDescriptor*> &paramTypes) : mParent(parent), mParamTypes(paramTypes) {}
 
 	private:
-		virtual Any NewInstanceImpl(std::vector<Any> &args) const = 0;
+		virtual std::any NewInstanceImpl(std::vector<std::any> &args) const = 0;
 
 		TypeDescriptor *mParent;
 		std::vector<TypeDescriptor const*> mParamTypes;
@@ -88,22 +89,22 @@ namespace Reflect
 		ConstructorImpl() : Constructor(Details::Resolve<Details::RawType<Type>>(), { Details::Resolve<Details::RawType<Args>>()... }) {}
 
 	private:
-		Any NewInstanceImpl(std::vector<Any> &args) const override
+		std::any NewInstanceImpl(std::vector<std::any> &args) const override
 		{
 			return NewInstanceImpl(args, std::make_index_sequence<sizeof...(Args)>());
 		}
 
 		template <size_t... indices>
-		Any NewInstanceImpl(std::vector<Any> &args, std::index_sequence<indices...> indexSequence) const
+		std::any NewInstanceImpl(std::vector<std::any> &args, std::index_sequence<indices...> indexSequence) const
 		{
-			std::tuple argsTuple = std::make_tuple(args[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
-			std::vector<Any> convertedArgs{ (std::get<indices>(argsTuple) ? AnyRef(*std::get<indices>(argsTuple)) : args[indices].TryConvert<std::remove_cv_t<std::remove_reference_t<Args>>>())... };
-			argsTuple = std::make_tuple(convertedArgs[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
+			std::tuple argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&args[indices])...);
+			std::vector<std::any> convertedArgs{ std::get<indices>(argsTuple)... };
+			argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&convertedArgs[indices])...);
 
 			if ((std::get<indices>(argsTuple) && ...))
 				return Type(*std::get<indices>(argsTuple)...);
-
-			return Any();
+			
+			return std::any();
 		}
 	};
 
@@ -116,22 +117,22 @@ namespace Reflect
 		FreeFunConstructor(CtorFun ctorFun) : Constructor(Details::Resolve<Details::RawType<Type>>(), { Details::Resolve<Details::RawType<Args>>()... }), mCtorFun(ctorFun) {}
 	
 	private:
-		Any NewInstanceImpl(std::vector<Any> &args) const override
+		std::any NewInstanceImpl(std::vector<std::any> &args) const override
 		{
 			return NewInstanceImpl(args, std::make_index_sequence<sizeof...(Args)>());
 		}
 
 		template <size_t... indices>
-		Any NewInstanceImpl(std::vector<Any> &args, std::index_sequence<indices...> indexSequence) const
+		std::any NewInstanceImpl(std::vector<std::any> &args, std::index_sequence<indices...> indexSequence) const
 		{
-			std::tuple argsTuple = std::make_tuple(args[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
-			std::vector<Any> convertedArgs{ (std::get<indices>(argsTuple) ? AnyRef(*std::get<indices>(argsTuple)) : args[indices].TryConvert<std::remove_cv_t<std::remove_reference_t<Args>>>())... };
-			argsTuple = std::make_tuple(convertedArgs[indices].TryCast<std::remove_cv_t<std::remove_reference_t<Args>>>()...);
+			std::tuple argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&args[indices])...);
+			std::vector<std::any> convertedArgs{ std::get<indices>(argsTuple)... };
+			argsTuple = std::make_tuple(std::any_cast<std::remove_cv_t<std::remove_reference_t<Args>>>(&convertedArgs[indices])...);
 
 			if ((std::get<indices>(argsTuple) && ...))
 				return mCtorFun(*std::get<indices>(argsTuple)...);
 
-			return Any();
+			return std::any();
 		}
 		
 		CtorFun mCtorFun;
