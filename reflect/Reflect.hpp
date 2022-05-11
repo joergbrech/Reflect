@@ -17,9 +17,9 @@ namespace Reflect
 	*/
 
 	template <typename Type>
-	TypeFactory<Type> &Reflect(const std::string &name)
+	TypeFactory<Type> &Reflect(const std::string &name, Reflect::TypeRegistry& registry)
 	{
-		return typeFactory<Type>.ReflectType(name);
+		return typeFactory<Type>.ReflectType(name, registry);
 	}
 
 	/*

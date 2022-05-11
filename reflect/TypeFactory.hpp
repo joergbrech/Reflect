@@ -15,16 +15,19 @@ namespace Reflect
 	template <typename Type>
 	TypeFactory<Type> typeFactory;
 
+	using TypeRegistry = std::map<std::string, TypeDescriptor*>;
+
 	template <typename Type>
 	class TypeFactory
 	{
 	public:
-		TypeFactory &ReflectType(const std::string &name)
+		TypeFactory &ReflectType(const std::string &name, 
+		                         TypeRegistry& typeRegistry = Reflect::Details::GetTypeRegistry())
 		{
 			TypeDescriptor *typeDescriptor = Details::Resolve<Type>();
 
 			typeDescriptor->mName = name;                           // #TODO_already_present
-			Details::GetTypeRegistry()[name] = typeDescriptor;
+			typeRegistry[name] = typeDescriptor;
 
 			return *this;
 		}
